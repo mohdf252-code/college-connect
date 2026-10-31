@@ -11,6 +11,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      lowercase: true,
+      trim: true,
     },
 
     password: {
@@ -42,10 +44,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
     isOnline: {
-  type: Boolean,
-  default: false,
-},
+      type: Boolean,
+      default: false,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
 
     skills: {
       type: [String],
