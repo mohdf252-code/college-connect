@@ -2,86 +2,13 @@ const router = require("express").Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const OTP = require("../models/OTP");
-const { sendVerificationEmail } = require("../utils/emailService");
-
-// Helper to validate institutional / college domain
-const isCollegeEmail = (email) => {
-  if (!email || typeof email !== "string") return false;
-  const normalized = email.trim().toLowerCase();
-
-  const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!basicEmailRegex.test(normalized)) return false;
-
-  // Allow bypass only if explicitly enabled in .env
-  if (process.env.ALLOW_ALL_EMAILS === "true") return true;
-
-  // Recognizes .edu, .ac.in, .edu.in, .ac.*, .edu.*, .res.in, and university domains
-  const specificEduRegex = /@(.*\.)?(edu|ac\.[a-z]{2,3}|edu\.[a-z]{2,3}|res\.in)$/i;
-  const eduDomainKeywordRegex = /@([a-zA-Z0-9-]+\.)*(college|university|univ|institute)(\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}$/i;
-
-  return specificEduRegex.test(normalized) || eduDomainKeywordRegex.test(normalized);
-};
 
 // ===============================
-// Send Verification Code (OTP)
-// ===============================
-router.post("/send-otp", async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || !email.trim()) {
-      return res.status(400).json({ message: "College email is required" });
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // 1. Validate college domain
-    if (!isCollegeEmail(normalizedEmail)) {
-      return res.status(400).json({
-        message: "Please enter your official college/university email (e.g. ending in .edu, .ac.in, .edu.in)",
-      });
-    }
-
-    // 2. Check if already registered
-    const existingUser = await User.findOne({ email: normalizedEmail });
-    if (existingUser) {
-      return res.status(400).json({
-        message: "An account with this college email already exists. Please login.",
-      });
-    }
-
-    // 3. Generate 6-digit code
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // 4. Overwrite previous OTPs for this email
-    await OTP.deleteMany({ email: normalizedEmail });
-    await OTP.create({
-      email: normalizedEmail,
-      otp,
-    });
-
-    // 5. Send email via Nodemailer
-    await sendVerificationEmail(normalizedEmail, otp);
-
-    res.json({
-      message: "Verification code sent to your college email",
-      email: normalizedEmail,
-    });
-  } catch (error) {
-    console.error("Send OTP Error:", error);
-    res.status(500).json({
-      message: error.message || "Could not send verification code",
-    });
-  }
-});
-
-// ===============================
-// Register with Verified OTP
+// Register (no OTP required)
 // ===============================
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, college, otp } = req.body;
+    const { name, email, password, college } = req.body;
 
     if (!name?.trim() || !email?.trim() || !password || !college?.trim()) {
       return res.status(400).json({ message: "All fields are required" });
@@ -89,14 +16,7 @@ router.post("/register", async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // 1. Validate college domain
-    if (!isCollegeEmail(normalizedEmail)) {
-      return res.status(400).json({
-        message: "Please enter your official college/university email (e.g. .edu, .ac.in)",
-      });
-    }
-
-    // 2. Check existing user
+    // Check existing user
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({
@@ -104,28 +24,7 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // 3. Validate OTP
-    if (!otp || !otp.trim()) {
-      return res.status(400).json({
-        message: "Please provide the 6-digit verification code sent to your email",
-      });
-    }
-
-    const otpRecord = await OTP.findOne({
-      email: normalizedEmail,
-      otp: otp.trim(),
-    });
-
-    if (!otpRecord) {
-      return res.status(400).json({
-        message: "Invalid or expired verification code. Please request a new one.",
-      });
-    }
-
-    // Clean up used OTP
-    await OTP.deleteMany({ email: normalizedEmail });
-
-    // 4. Hash password and create user
+    // Hash password and create user
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
@@ -137,7 +36,7 @@ router.post("/register", async (req, res) => {
     });
 
     res.status(201).json({
-      message: "College email verified and account created successfully!",
+      message: "Account created successfully!",
       user: {
         id: user._id,
         name: user.name,
