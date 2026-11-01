@@ -19,11 +19,26 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Health check routes
+app.get("/", (req, res) => {
+  res.json({ message: "College Connect API is online and running!", timestamp: new Date() });
+});
+app.get("/api/health", (req, res) => {
+  res.json({ status: "healthy", timestamp: new Date() });
+});
+
+// Routes (supporting both /api/* and /* prefixes to prevent 404 mismatches)
 app.use("/api/auth", authRoutes);
+app.use("/auth", authRoutes);
+
 app.use("/api/users", userRoutes);
+app.use("/users", userRoutes);
+
 app.use("/api/notes", noteRoutes);
+app.use("/notes", noteRoutes);
+
 app.use("/api/projects", projectRoutes);
+app.use("/projects", projectRoutes);
 
 // MongoDB Connection
 mongoose
@@ -37,7 +52,10 @@ const io = new Server(server, {
     origin: "*",
   },
 });
-app.use("/api/messages", createMessageRoutes(io));
+
+const messageRouter = createMessageRoutes(io);
+app.use("/api/messages", messageRouter);
+app.use("/messages", messageRouter);
 
 io.on("connection", (socket) => {
   console.log("User Connected:", socket.id);
